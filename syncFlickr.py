@@ -91,15 +91,19 @@ def get_flickr_photos_in_photoset(photosetID, local_metadata_map):
 
                         if tagname == 'XMP-xmpMM PreservedFileName':  # Assuming 'Preserved File Name' might be 'File Name' in Flickr's Exif
                             flickr_photo['exif']['Preserved File Name'] = clean_content or raw_content
-                        elif tagname == 'DocumentID':  # Assuming 'Document ID' might be 'DocumentID'
+                        elif tagname == 'XMP-xmpMM DocumentID':  # Assuming 'Document ID' might be 'DocumentID'
                             flickr_photo['exif']['Document ID'] = clean_content or raw_content
+                        elif tagname == 'XMP-xmpMM InstanceID':
+                            flickr_photo['exif']['Instance ID'] = clean_content or raw_content
+                        elif tagname == 'IFD0 ModifyDate':
+                            flickr_photo['exif']['Modify Date'] = clean_content or raw_content
                         # Add other GPS EXIF tags if needed from the CIPA standard, e.g., GPSLatitude, GPSLongitude, GPSAltitude
-                        elif tagname == 'GPS GPSLatitude':
+                        elif tagname == 'GPS GPSLatitudeRef':
                             # This will be string like "35/1, 48/1, 8/1" needing parsing
                             flickr_photo['exif']['GPSLatitude'] = clean_content or raw_content
-                        elif tagname == 'GPS GPSLongitude':
+                        elif tagname == 'GPS GPSLongitudeRef':
                             flickr_photo['exif']['GPSLongitude'] = clean_content or raw_content
-                        elif tagname == 'GPS GPSAltitude':
+                        elif tagname == 'GPS GPSAltitudeRef':
                             flickr_photo['exif']['GPSAltitude'] = clean_content or raw_content
 
                 update_matched_local(flickr_photo, local_metadata_map)
@@ -113,12 +117,19 @@ def update_matched_local(f_photo, local_metadata_map):
         f_description = f_photo['description']
         f_preserved_filename = f_photo['exif'].get('Preserved File Name')
         f_document_id = f_photo['exif'].get('Document ID')
+        f_instance_id = f_photo['exif'].get('Instance ID')
+        f_modify_date = f_photo['exif'].get('Modify Date')
         found_match = False
         matched_file = []
         for l_filepath, l_meta in local_metadata_map.items():
             l_filename_without_ext = os.path.splitext(l_meta['filename'])  # 拡張子なしのファイル名
-            # 条件1: FlickrのPreserved File Nameがローカルのファイル名と同じ
-            if f_preserved_filename:
+            # 条件1: instance ID が等しい
+            if f_instance_id and l_meta['instance_id'] and f_instance_id == l_meta['instance_id']:
+                print(f"マッチを検出 (Preserved File Name): Flickr ID {f_photo['id']} とファイル {l_meta['filename']}")
+                matched_file.append(l_filepath)
+                found_match = True
+            # 条件2: FlickrのPreserved File Nameがローカルのファイル名と同じ
+            elif f_preserved_filename:
                 sfilename = os.path.splitext(f_preserved_filename)
                 if sfilename[0] == l_filename_without_ext[0]:
                     print(f"マッチを検出 (Preserved File Name): Flickr ID {f_photo['id']} とファイル {l_meta['filename']}")
@@ -132,11 +143,15 @@ def update_matched_local(f_photo, local_metadata_map):
                     print(f"マッチを検出 (Preserved File Name): Flickr ID {f_photo['id']} とファイル {l_meta['filename']}")
                     matched_file.append(l_filepath)
                     found_match = True
-
-            # 条件2: FlickrのDocument IDがローカルのDocument IDと同じ
+            # 条件3: Modify Dateが等しい
+            elif f_modify_date and l_meta['modify_date'] and f_modify_date == l_meta['modify_date']:
+                print(f"マッチを検出 (Preserved File Name): Flickr ID {f_photo['id']} とファイル {l_meta['filename']}")
+                matched_file.append(l_filepath)
+                found_match = True
+            # 条件4: FlickrのDocument IDがローカルのDocument IDと同じ
             # ローカルファイルのDocument IDは、ExifまたはXMPから読み取る必要があります。
             # ここではダミーの実装になっています。
-            if f_document_id and l_meta['document_id'] and f_document_id == l_meta['document_id']:
+            elif f_document_id and l_meta['document_id'] and f_document_id == l_meta['document_id']:
                 print(f"マッチを検出 (Document ID): Flickr ID {f_photo['id']} とファイル {l_meta['filename']}")
                 found_match = True
 
@@ -159,6 +174,8 @@ def get_local_file_metadata(filepath):
     metadata = {
         'filename': os.path.basename(filepath),
         'document_id': None,  # ローカルファイルのDocument ID
+        'instance_id': None,
+        'modify_date': None,
         'iptc_title': None,
         'iptc_description': None,
         'gps_latitude': None,
@@ -171,6 +188,10 @@ def get_local_file_metadata(filepath):
                 for k, v in d.items():
                     if k == 'Document ID':
                         metadata['document_id'] = v
+                    elif k == 'Instance ID':
+                        metadata['instance_id'] = v
+                    elif k == 'EXIF:ModifyDate':
+                        metadata['modify_date'] = v
 
         # exif_data = read_exif(filepath)
         # metadata['document_id'] = exif_data.get('Document ID') # 仮のキー名
@@ -182,7 +203,7 @@ def get_local_file_metadata(filepath):
         # metadata['gps_longitude'] = gps_info.get('longitude')
         # metadata['gps_altitude'] = gps_info.get('altitude')
 
-        print(f"  ローカルファイル {metadata['filename']} メタデータ取得完了。")
+        #print(f"  ローカルファイル {metadata['filename']} メタデータ取得完了。")
     except Exception as e:
         print(f"  ローカルファイル {filepath} のメタデータ読み込みエラー: {e}")
     return metadata
@@ -196,26 +217,20 @@ def update_local_file_metadata(matched_file, flickr_data):
         with ExifToolHelper() as et:
             et.set_tags(matched_file, tags={'ImageDescription': flickr_data['title']},
                         params=["-P", "-overwrite_original"])
-            et.set_tags(matched_file, tags={'IPTC:title': flickr_data['title']},
+            et.set_tags(matched_file, tags={'XPComment': flickr_data['description']},
                         params=["-P", "-overwrite_original"])
-            et.set_tags(matched_file, tags={'IPTC:description': flickr_data['description']},
-                        params=["-P", "-overwrite_original"])
-        # IPTC Titleへの書き込み
-        # write_iptc(filepath, 'Title', flickr_data['title'])
-        # IPTC Descriptionへの書き込み
-        # write_iptc(filepath, 'Description', flickr_data['description'])
+            # GPS座標の書き込み
+            if flickr_data['latitude'] is not None and flickr_data['longitude'] is not None:
+                print(f"    GPS座標: ({flickr_data['latitude']}, {flickr_data['longitude']}) を書き込み予定。")
+                et.set_tags(matched_file, tags={'GPSLatitude': flickr_data['latitude'],})
+                et.set_tags(matched_file, tags={'GPSLongitude': flickr_data['longitude'],})
+                et.set_tags(matched_file, tags={'GPSAltitude': flickr_data['altitude']})
+            else:
+                print("    FlickrデータにGPS座標がありません。")
 
-        # GPS座標の書き込み
-        if flickr_data['latitude'] is not None and flickr_data['longitude'] is not None:
-            # set_gps(filepath, flickr_data['latitude'], flickr_data['longitude'], flickr_data['altitude'])
-            print(f"    GPS座標: ({flickr_data['latitude']}, {flickr_data['longitude']}) を書き込み予定。")
-        else:
-            print("    FlickrデータにGPS座標がありません。")
-
-        print(f"  ローカルファイル {os.path.basename(filepath)} のメタデータ更新完了。")
+        print(f"  ローカルファイル {matched_file} のメタデータ更新完了。")
     except Exception as e:
-        print(f"  ローカルファイル {filepath} のメタデータ書き込みエラー: {e}")
-
+        print(f"  ローカルファイル {matched_file} のメタデータ書き込みエラー: {e}")
 
 # --- メイン処理 ---
 def synchronize_photos(args):
@@ -238,10 +253,6 @@ def synchronize_photos(args):
         print("Flickr Photosetから写真が取得できませんでした。")
         return
     print(f"\nFlickrから {len(flickr_photos)} 枚の写真を取得しました。")
-
-
-
-
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Synchronize Flickr photoset and local folder.")
