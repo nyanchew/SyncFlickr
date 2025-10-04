@@ -2,7 +2,6 @@ import argparse
 import os
 import time
 import webbrowser
-from collections.abc import tuple_iterator
 
 import flickrapi
 from dotenv import load_dotenv
@@ -51,10 +50,18 @@ def update_local_meta_by_flickr_photos(photosetID, local_metadata_map):
         current_photos = response['photoset']['photo']
         if not current_photos:
             break
-
         for photo_summary in current_photos:
             photo_id = photo_summary['id']
-            info_response = flickr.photos.getInfo(photo_id=photo_id)
+            try:
+                info_response = flickr.photos.getInfo(photo_id=photo_id)
+            except FlickrError as e:
+                print(e.args[0])
+                time.sleep(30)
+                try:
+                    info_response = flickr.photos.getInfo(photo_id=photo_id)
+                except FlickrError as e:
+                    print(e.args[0])
+                    continue
             print(f"写真ID: {photo_id} {info_response['photo']['title']['_content']}...")
             exif_response = flickr.photos.getExif(photo_id=photo_id)
             try:
@@ -131,15 +138,15 @@ def update_matched_local(f_photo, local_metadata_map):
         if f_preserved_filename:
             sfilename = os.path.splitext(f_preserved_filename)
             if sfilename[0] == l_filename_without_ext[0]:
-                print(f"マッチを検出 (Preserved File Name): Flickr ID {f_photo['id']} とファイル {l_meta['filename']}")
+                print(f"マッチを検出: Flickr ID {f_photo['id']} とファイル {l_meta['filename']}")
                 matched_file.append(l_filepath)
                 found_match = True
             if sfilename[0] + '_Nik_NIK' == l_filename_without_ext[0]:
-                print(f"マッチを検出 (Preserved File Name _Nik_NIK): Flickr ID {f_photo['id']} とファイル {l_meta['filename']}")
+                print(f"マッチを検出: Flickr ID {f_photo['id']} とファイル {l_meta['filename']}")
                 matched_file.append(l_filepath)
                 found_match = True
             if sfilename[0] + '_Nik' == l_filename_without_ext[0] and l_filename_without_ext[1] == '.tif':
-                print(f"マッチを検出 (Preserved File Name _Nik): Flickr ID {f_photo['id']} とファイル {l_meta['filename']}")
+                print(f"マッチを検出: Flickr ID {f_photo['id']} とファイル {l_meta['filename']}")
                 matched_file.append(l_filepath)
                 found_match = True
         # 条件3: Modify Dateが等しい
@@ -149,8 +156,10 @@ def update_matched_local(f_photo, local_metadata_map):
             found_match = True
 
     if not found_match:
-        print(f"Flickr写真 ID {f_photo['id']} (Title: {f_title}) に対応するローカルファイルが見つかりませんでした。")
+        print(f">>>>>Flickr写真 ID {f_photo['id']} (Title: {f_title}) に対応するローカルファイルが見つかりませんでした。")
         return
+    if len(matched_file) > 2:
+        print(">>>>>3個以上のファイルがマッチ！")
     print("ペアリングされた写真のメタデータをローカルファイルに同期します...")
     for l_filepath in matched_file:
         local_metadata_map.pop(l_filepath)
@@ -196,12 +205,10 @@ def update_local_file_metadata(matched_file, flickr_data):
                         params=["-P", "-overwrite_original"])
             # GPS座標の書き込み
             if flickr_data['latitude'] is not None and flickr_data['longitude'] is not None:
-                print(f"    GPS座標: ({flickr_data['latitude']}, {flickr_data['longitude']}) を書き込み予定。")
+                print(f"    GPS座標: ({flickr_data['latitude']}, {flickr_data['longitude']}) を書き込み。")
                 et.set_tags(matched_file, tags={'GPSLatitude': flickr_data['latitude'], })
                 et.set_tags(matched_file, tags={'GPSLongitude': flickr_data['longitude'], })
-                et.set_tags(matched_file, tags={'GPSAltitude': flickr_data['altitude']})
-            else:
-                print("    FlickrデータにGPS座標がありません。")
+                #et.set_tags(matched_file, tags={'GPSAltitude': flickr_data['altitude']})
 
         print(f"  ローカルファイル {matched_file} のメタデータ更新完了。\n")
     except Exception as e:
@@ -218,7 +225,11 @@ def synchronize_photos(args):
     print(f"ローカルに {len(local_files)} 個の画像ファイルが見つかりました。\n")
     # ローカルファイル情報を事前に読み込む
     local_metadata_map = {}
+    counter = 0
     for filepath in local_files:
+        counter += 1
+        if counter % 10 == 0:
+            print("x", end='')
         local_meta = get_local_file_metadata(filepath)
         local_metadata_map[filepath] = local_meta
     update_local_meta_by_flickr_photos(args.photosetID, local_metadata_map)
