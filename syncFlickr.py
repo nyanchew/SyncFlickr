@@ -52,6 +52,9 @@ def update_local_meta_by_flickr_photos(photosetID, local_metadata_map):
             break
         for photo_summary in current_photos:
             photo_id = photo_summary['id']
+
+            #if photo_id != '31559833176':
+            #   continue
             try:
                 info_response = flickr.photos.getInfo(photo_id=photo_id)
             except FlickrError as e:
@@ -61,9 +64,15 @@ def update_local_meta_by_flickr_photos(photosetID, local_metadata_map):
                     info_response = flickr.photos.getInfo(photo_id=photo_id)
                 except FlickrError as e:
                     print(e.args[0])
+                    print("flickr.photos.getInfo failed.")
                     continue
             print(f"写真ID: {photo_id} {info_response['photo']['title']['_content']}...")
-            exif_response = flickr.photos.getExif(photo_id=photo_id)
+            try:
+                exif_response = flickr.photos.getExif(photo_id=photo_id)
+            except FlickrError as e:
+                print(e.args[0])
+                print("flickr.photos.getExif failed.")
+                continue
             try:
                 geo_response = flickr.photos.geo.getLocation(photo_id=photo_id)
             except FlickrError as e:
@@ -115,6 +124,8 @@ def update_local_meta_by_flickr_photos(photosetID, local_metadata_map):
                             flickr_photo['exif']['GPSLongitude'] = clean_content or raw_content
                         elif tagname == 'GPS GPSAltitudeRef':
                             flickr_photo['exif']['GPSAltitude'] = clean_content or raw_content
+                        elif tagname == 'ExifIFD CreateDate':
+                            flickr_photo['exif']['CreateDate'] = clean_content or raw_content
 
                 update_matched_local(flickr_photo, local_metadata_map)
             time.sleep(0.1)  # API呼び出しのレート制限を考慮
@@ -130,11 +141,12 @@ def update_matched_local(f_photo, local_metadata_map):
     f_document_id = f_photo['exif'].get('Document ID')
     f_instance_id = f_photo['exif'].get('Instance ID')
     f_modify_date = f_photo['exif'].get('Modify Date')
+    f_create_date = f_photo['exif'].get('CreateDate')
     found_match = False
     matched_file = []
     for l_filepath, l_meta in local_metadata_map.items():
         l_filename_without_ext = os.path.splitext(l_meta['filename'])  # 拡張子なしのファイル名
-        # 条件2: FlickrのPreserved File Nameがローカルのファイル名と同じ
+        # 条件1: FlickrのPreserved File Nameがローカルのファイル名と同じ
         if f_preserved_filename:
             sfilename = os.path.splitext(f_preserved_filename)
             if sfilename[0] == l_filename_without_ext[0]:
@@ -149,8 +161,18 @@ def update_matched_local(f_photo, local_metadata_map):
                 print(f"マッチを検出: Flickr ID {f_photo['id']} とファイル {l_meta['filename']}")
                 matched_file.append(l_filepath)
                 found_match = True
-        # 条件3: Modify Dateが等しい
+        # 条件2: Modify Dateが等しい
         elif f_modify_date and l_meta['modify_date'] and f_modify_date == l_meta['modify_date']:
+            print(f"マッチを検出 (Modify Date): Flickr ID {f_photo['id']} とファイル {l_meta['filename']}")
+            matched_file.append(l_filepath)
+            found_match = True
+        # 条件3: CreateDate（Exif:Date and Time(Digitized)）が等しい
+        elif f_create_date and l_meta['create_date'] and f_create_date == l_meta['create_date']:
+            print(f"マッチを検出 (Modify Date): Flickr ID {f_photo['id']} とファイル {l_meta['filename']}")
+            matched_file.append(l_filepath)
+            found_match = True
+        # 条件4: Flickrのタイトルとローカルのファイル名が等しい
+        elif l_filename_without_ext[0] == f_title:
             print(f"マッチを検出 (Modify Date): Flickr ID {f_photo['id']} とファイル {l_meta['filename']}")
             matched_file.append(l_filepath)
             found_match = True
@@ -181,6 +203,7 @@ def get_local_file_metadata(filepath):
         'gps_latitude': None,
         'gps_longitude': None,
         'gps_altitude': None,
+        'create_date': None,
     }
     try:
         with ExifToolHelper() as et:
@@ -188,6 +211,8 @@ def get_local_file_metadata(filepath):
                 for k, v in d.items():
                     if k == 'EXIF:ModifyDate':
                         metadata['modify_date'] = v
+                    elif k == 'EXIF:CreateDate':
+                        metadata['create_date'] = v
     except Exception as e:
         print(f"  ローカルファイル {filepath} のメタデータ読み込みエラー: {e}")
     return metadata
