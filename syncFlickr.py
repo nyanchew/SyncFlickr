@@ -15,6 +15,34 @@ FLICKR_API_KEY = os.environ.get('MY_FLICKR_API_KEY')
 FLICKR_API_SECRET = os.environ.get('SECRET_KEY')
 USERID = os.environ.get('USER_ID')
 
+def clean_filename(text: str) -> str:
+    """
+    文字列の末尾から指定されたサフィックスを、含まれなくなるまで繰り返し削除する関数。
+    """
+    suffixes_to_remove = ["-scanned", "_Nik", "_Nik_NIK"]
+
+    # 削除できるサフィックスがある限り、ループを続ける
+    while True:
+        removed_once = False  # 今回のループで何かを削除したかどうかのフラグ
+
+        for suffix in suffixes_to_remove:
+            # 文字列の末尾が現在のサフィックスと一致するかを確認
+            if text.endswith(suffix):
+                # 一致したらサフィックスを削除
+                # Python 3.9以降の `removesuffix()` が最も簡潔
+                text = text.removesuffix(suffix)
+
+                # 削除したのでフラグを立てて、サフィックスリストの最初に戻って再チェック
+                # 例: "file_Nik_Nik" のように連続している場合に対応
+                removed_once = True
+                break  # forループを中断し、whileループの先頭へ
+
+        # どのサフィックスも削除されなかった場合、ループを終了
+        if not removed_once:
+            break
+
+    return text
+
 
 # Flickrの認証を得る
 def flickr_authentication(flickr):
@@ -87,9 +115,10 @@ def update_local_meta_by_flickr_photos(photosetID, local_metadata_map):
                     'latitude': None,
                     'longitude': None,
                     'altitude': None,
-                    'exif': {}
+                    'exif': {},
+                    'taken': photo_info['dates']['taken'].replace("-",":",2)
                 }
-
+                flickr_photo['exif']['CreateDate'] = None
                 if geo_response and geo_response['stat'] == 'ok' and 'photo' in geo_response and 'location' in \
                         geo_response['photo']:
                     location = geo_response['photo']['location']
@@ -126,7 +155,8 @@ def update_local_meta_by_flickr_photos(photosetID, local_metadata_map):
                             flickr_photo['exif']['GPSAltitude'] = clean_content or raw_content
                         elif tagname == 'ExifIFD CreateDate':
                             flickr_photo['exif']['CreateDate'] = clean_content or raw_content
-
+                if flickr_photo['exif']['CreateDate'] != flickr_photo['taken']:
+                    flickr_photo['exif']['CreateDate'] = flickr_photo['taken']
                 update_matched_local(flickr_photo, local_metadata_map)
             time.sleep(0.1)  # API呼び出しのレート制限を考慮
         if len(current_photos) < per_page:
@@ -146,18 +176,11 @@ def update_matched_local(f_photo, local_metadata_map):
     matched_file = []
     for l_filepath, l_meta in local_metadata_map.items():
         l_filename_without_ext = os.path.splitext(l_meta['filename'])  # 拡張子なしのファイル名
+        l_filename_without_suffix = clean_filename(l_filename_without_ext[0])
         # 条件1: FlickrのPreserved File Nameがローカルのファイル名と同じ
         if f_preserved_filename:
             sfilename = os.path.splitext(f_preserved_filename)
-            if sfilename[0] == l_filename_without_ext[0]:
-                print(f"マッチを検出: Flickr ID {f_photo['id']} とファイル {l_meta['filename']}")
-                matched_file.append(l_filepath)
-                found_match = True
-            if sfilename[0] + '_Nik_NIK' == l_filename_without_ext[0]:
-                print(f"マッチを検出: Flickr ID {f_photo['id']} とファイル {l_meta['filename']}")
-                matched_file.append(l_filepath)
-                found_match = True
-            if sfilename[0] + '_Nik' == l_filename_without_ext[0] and l_filename_without_ext[1] == '.tif':
+        if f_preserved_filename and sfilename[0] == l_filename_without_suffix:
                 print(f"マッチを検出: Flickr ID {f_photo['id']} とファイル {l_meta['filename']}")
                 matched_file.append(l_filepath)
                 found_match = True
@@ -172,7 +195,7 @@ def update_matched_local(f_photo, local_metadata_map):
             matched_file.append(l_filepath)
             found_match = True
         # 条件4: Flickrのタイトルとローカルのファイル名が等しい
-        elif l_filename_without_ext[0] == f_title:
+        elif l_filename_without_suffix == f_title:
             print(f"マッチを検出 (Modify Date): Flickr ID {f_photo['id']} とファイル {l_meta['filename']}")
             matched_file.append(l_filepath)
             found_match = True
@@ -274,3 +297,5 @@ if __name__ == "__main__":
     flickr = flickrapi.FlickrAPI(FLICKR_API_KEY, FLICKR_API_SECRET, format='parsed-json')
     flickr_authentication(flickr)
     synchronize_photos(args)
+
+
