@@ -277,7 +277,7 @@ def synchronize_photos(args):
     for filepath in local_files:
         counter += 1
         if counter % 10 == 0:
-            print("x", end='')
+            print("x", end='', flush=True)
         local_meta = get_local_file_metadata(filepath)
         local_metadata_map[filepath] = local_meta
     update_local_meta_by_flickr_photos(args.photosetID, local_metadata_map)
