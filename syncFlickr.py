@@ -181,7 +181,7 @@ def update_matched_local(f_photo, local_metadata_map):
         if f_preserved_filename:
             sfilename = os.path.splitext(f_preserved_filename)
         if f_preserved_filename and sfilename[0] == l_filename_without_suffix:
-                print(f"マッチを検出: Flickr ID {f_photo['id']} とファイル {l_meta['filename']}")
+                print(f"マッチを検出(Preserved File): Flickr ID {f_photo['id']} とファイル {l_meta['filename']}")
                 matched_file.append(l_filepath)
                 found_match = True
         # 条件2: Modify Dateが等しい
@@ -191,12 +191,12 @@ def update_matched_local(f_photo, local_metadata_map):
             found_match = True
         # 条件3: CreateDate（Exif:Date and Time(Digitized)）が等しい
         elif f_create_date and l_meta['create_date'] and f_create_date == l_meta['create_date']:
-            print(f"マッチを検出 (Modify Date): Flickr ID {f_photo['id']} とファイル {l_meta['filename']}")
+            print(f"マッチを検出 (Create Date): Flickr ID {f_photo['id']} とファイル {l_meta['filename']}")
             matched_file.append(l_filepath)
             found_match = True
         # 条件4: Flickrのタイトルとローカルのファイル名が等しい
         elif l_filename_without_suffix == f_title:
-            print(f"マッチを検出 (Modify Date): Flickr ID {f_photo['id']} とファイル {l_meta['filename']}")
+            print(f"マッチを検出 (Title and filename): Flickr ID {f_photo['id']} とファイル {l_meta['filename']}")
             matched_file.append(l_filepath)
             found_match = True
 
@@ -268,7 +268,7 @@ def synchronize_photos(args):
     local_files = []
     for root, _, files in os.walk(args.folder):
         for file in files:
-            if file.lower().endswith(('.jpg', '.jpeg', '.tif', '.tiff', '.NEF', '.ORF')):  # 画像ファイルのみを対象
+            if file.lower().endswith(('.jpg', '.jpeg', '.tif', '.tiff', '.NEF', '.ORF', '.psd')):  # 画像ファイルのみを対象
                 local_files.append(os.path.join(root, file))
     print(f"ローカルに {len(local_files)} 個の画像ファイルが見つかりました。\n")
     # ローカルファイル情報を事前に読み込む
