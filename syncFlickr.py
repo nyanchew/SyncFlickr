@@ -106,9 +106,15 @@ def update_local_meta_by_flickr_photos(photosetID, local_metadata_map):
             except FlickrError as e:
                 print(e.args[0])
                 geo_response = None
+            try:
+                tag_response = flickr.tags.getListPhoto(photo_id=photo_id)
+            except FlickrError as e:
+                print(e.args[0])
+                tag_response = None
             if info_response and info_response['photo']:
                 photo_info = info_response['photo']
                 flickr_photo = {
+                    'photoid': photo_id,
                     'id': photo_info['id'],
                     'title': photo_info['title']['_content'],
                     'description': photo_info['description']['_content'],
@@ -116,7 +122,8 @@ def update_local_meta_by_flickr_photos(photosetID, local_metadata_map):
                     'longitude': None,
                     'altitude': None,
                     'exif': {},
-                    'taken': photo_info['dates']['taken'].replace("-",":",2)
+                    'taken': photo_info['dates']['taken'].replace("-",":",2),
+                    'tags': None
                 }
                 flickr_photo['exif']['CreateDate'] = None
                 if geo_response and geo_response['stat'] == 'ok' and 'photo' in geo_response and 'location' in \
@@ -157,6 +164,11 @@ def update_local_meta_by_flickr_photos(photosetID, local_metadata_map):
                             flickr_photo['exif']['CreateDate'] = clean_content or raw_content
                 if flickr_photo['exif']['CreateDate'] != flickr_photo['taken']:
                     flickr_photo['exif']['CreateDate'] = flickr_photo['taken']
+                if tag_response and tag_response['stat'] == 'ok' and 'photo' in tag_response:
+                    tagList = []
+                    for tag in tag_response['photo']['tags']['tag']:
+                        tagList.append(tag['raw'])
+                    flickr_photo['tags'] = tagList
                 update_matched_local(flickr_photo, local_metadata_map)
             time.sleep(0.1)  # API呼び出しのレート制限を考慮
         if len(current_photos) < per_page:
@@ -206,11 +218,12 @@ def update_matched_local(f_photo, local_metadata_map):
     if len(matched_file) > 2:
         print(">>>>>3個以上のファイルがマッチ！")
     print("ペアリングされた写真のメタデータをローカルファイルに同期します...")
+    # ペアリングされた写真のメタデータをローカルファイルに書き込む
+    update_local_file_metadata(matched_file, f_photo, local_metadata_map)
+    time.sleep(0.05)  # ファイル書き込み間の遅延
     for l_filepath in matched_file:
         local_metadata_map.pop(l_filepath)
-    # ペアリングされた写真のメタデータをローカルファイルに書き込む
-    update_local_file_metadata(matched_file, f_photo)
-    time.sleep(0.05)  # ファイル書き込み間の遅延
+
 
 
 # --- ローカルファイルメタデータ処理（概念的な関数、実際の実装は選択したライブラリによる） ---
@@ -223,6 +236,7 @@ def get_local_file_metadata(filepath):
         'modify_date': None,
         'iptc_title': None,
         'iptc_description': None,
+        'iptc_keywords': None,
         'gps_latitude': None,
         'gps_longitude': None,
         'gps_altitude': None,
@@ -236,12 +250,15 @@ def get_local_file_metadata(filepath):
                         metadata['modify_date'] = v
                     elif k == 'EXIF:CreateDate':
                         metadata['create_date'] = v
+                    elif k == 'IPTC:Keywords':
+                        modtags = "|".join(v).replace(", ",",").replace(" ","_").replace(",","|").split("|")
+                        metadata['iptc_keywords'] = modtags
     except Exception as e:
         print(f"  ローカルファイル {filepath} のメタデータ読み込みエラー: {e}")
     return metadata
 
 
-def update_local_file_metadata(matched_file, flickr_data):
+def update_local_file_metadata(matched_file, flickr_data, local_metadata_map):
     """
     ローカルの画像ファイルにFlickrのメタデータを書き込む
     """
@@ -251,6 +268,22 @@ def update_local_file_metadata(matched_file, flickr_data):
                         params=["-P", "-overwrite_original"])
             et.set_tags(matched_file, tags={'XPComment': flickr_data['description']},
                         params=["-P", "-overwrite_original"])
+            for lfile in matched_file:
+                localtags = local_metadata_map.get(lfile)['iptc_keywords']
+                if flickr_data['tags']:
+                    if localtags:
+                        newtags = list(set(localtags) | set(flickr_data['tags']))
+                        et.set_tags(lfile, tags={'Keywords': newtags})
+                        flickr.photos.settags(photo_id=flickr_data['photoid'], tags=" ".join(newtags))
+                        print(f"Tags: {newtags}")
+                    else:
+                        et.set_tags(lfile, tags={'Keywords': flickr_data['tags']})
+                else:
+                    if localtags:
+                        flickr.photos.settags(photo_id=flickr_data['photoid'], tags=" ".join(localtags))
+                        print(f"Tags: {localtags}")
+
+            #et.set_tags(matched_file, tags={'': flickr_data['tags']},)
             # GPS座標の書き込み
             if flickr_data['latitude'] is not None and flickr_data['longitude'] is not None:
                 print(f"    GPS座標: ({flickr_data['latitude']}, {flickr_data['longitude']}) を書き込み。")
