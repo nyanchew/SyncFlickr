@@ -167,6 +167,10 @@ def update_local_meta_by_flickr_photos(photosetID, local_metadata_map):
                 if tag_response and tag_response['stat'] == 'ok' and 'photo' in tag_response:
                     tagList = []
                     for tag in tag_response['photo']['tags']['tag']:
+                        if tag['raw'][0:3] == "201" or tag['raw'][0:9] == "file:md5" or tag['raw'][0:9] == "file:sha":
+                            continue
+                        if tag['raw'][0:6] == "img201":
+                            continue
                         tagList.append(tag['raw'])
                     flickr_photo['tags'] = tagList
                 update_matched_local(flickr_photo, local_metadata_map)
@@ -202,7 +206,7 @@ def update_matched_local(f_photo, local_metadata_map):
             matched_file.append(l_filepath)
             found_match = True
         # 条件3: CreateDate（Exif:Date and Time(Digitized)）が等しい
-        elif f_create_date and l_meta['create_date'] and f_create_date == l_meta['create_date']:
+        elif f_create_date and f_create_date[11:19] != "00:00:00" and l_meta['create_date'] and f_create_date == l_meta['create_date']:
             print(f"マッチを検出 (Create Date): Flickr ID {f_photo['id']} とファイル {l_meta['filename']}")
             matched_file.append(l_filepath)
             found_match = True
@@ -251,7 +255,12 @@ def get_local_file_metadata(filepath):
                     elif k == 'EXIF:CreateDate':
                         metadata['create_date'] = v
                     elif k == 'IPTC:Keywords':
-                        modtags = "|".join(v).replace(", ",",").replace(" ","_").replace(",","|").split("|")
+                        tags = []
+                        for tag in v:
+                            if (tag[0:3] == "201"):
+                                continue
+                            tags.append(tag)
+                        modtags = "|".join(tags).replace(", ",",").replace(" ","_").replace(",","|").split("|")
                         metadata['iptc_keywords'] = modtags
     except Exception as e:
         print(f"  ローカルファイル {filepath} のメタデータ読み込みエラー: {e}")
@@ -278,6 +287,7 @@ def update_local_file_metadata(matched_file, flickr_data, local_metadata_map):
                         print(f"Tags: {newtags}")
                     else:
                         et.set_tags(lfile, tags={'Keywords': flickr_data['tags']})
+                        print(f"Tags: {flickr_data['tags']}")
                 else:
                     if localtags:
                         flickr.photos.settags(photo_id=flickr_data['photoid'], tags=" ".join(localtags))
