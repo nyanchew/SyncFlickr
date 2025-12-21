@@ -240,7 +240,7 @@ def get_local_file_metadata(filepath):
         'modify_date': None,
         'iptc_title': None,
         'iptc_description': None,
-        'iptc_keywords': None,
+        'keywords': None,
         'gps_latitude': None,
         'gps_longitude': None,
         'gps_altitude': None,
@@ -249,19 +249,19 @@ def get_local_file_metadata(filepath):
     try:
         with ExifToolHelper() as et:
             for d in et.get_metadata(filepath):
+                tags = []
                 for k, v in d.items():
                     if k == 'EXIF:ModifyDate':
                         metadata['modify_date'] = v
                     elif k == 'EXIF:CreateDate':
                         metadata['create_date'] = v
-                    elif k == 'IPTC:Keywords':
-                        tags = []
+                    elif k == 'IPTC:Keywords' or k == 'EXIF:XPKeywords' or k == 'XMP:LastKeywordXMP':
                         for tag in v:
                             if (tag[0:3] == "201"):
                                 continue
                             tags.append(tag)
-                        modtags = "|".join(tags).replace(", ",",").replace(" ","_").replace(",","|").split("|")
-                        metadata['iptc_keywords'] = modtags
+            modtags = "|".join(tags).replace(", ",",").replace(" ","_").replace(",","|").split("|")
+            metadata['keywords'] = modtags
     except Exception as e:
         print(f"  ローカルファイル {filepath} のメタデータ読み込みエラー: {e}")
     return metadata
@@ -282,11 +282,11 @@ def update_local_file_metadata(matched_file, flickr_data, local_metadata_map):
                 if flickr_data['tags']:
                     if localtags:
                         newtags = list(set(localtags) | set(flickr_data['tags']))
-                        et.set_tags(lfile, tags={'Keywords': newtags})
+                        et.set_tags(lfile, tags={'Keywords': newtags}, params=["-P", "-overwrite_original"])
                         flickr.photos.settags(photo_id=flickr_data['photoid'], tags=" ".join(newtags))
                         print(f"Tags: {newtags}")
                     else:
-                        et.set_tags(lfile, tags={'Keywords': flickr_data['tags']})
+                        et.set_tags(lfile, tags={'Keywords': flickr_data['tags']}, params=["-P", "-overwrite_original"])
                         print(f"Tags: {flickr_data['tags']}")
                 else:
                     if localtags:
