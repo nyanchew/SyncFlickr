@@ -249,17 +249,21 @@ def get_local_file_metadata(filepath):
     try:
         with ExifToolHelper() as et:
             for d in et.get_metadata(filepath):
-                tags = []
+                tags = set()
                 for k, v in d.items():
                     if k == 'EXIF:ModifyDate':
                         metadata['modify_date'] = v
                     elif k == 'EXIF:CreateDate':
                         metadata['create_date'] = v
-                    elif k == 'IPTC:Keywords' or k == 'EXIF:XPKeywords' or k == 'XMP:LastKeywordXMP':
-                        for tag in v:
+                    elif k == 'IPTC:Keywords' or k == 'XMP:LastKeywordXMP' or k == 'EXIF:XPKeywords':
+                        if k == 'EXIF:XPKeywords':
+                            ltags = v.split(';')
+                        else:
+                            ltags = v
+                        for tag in ltags:
                             if (tag[0:3] == "201"):
                                 continue
-                            tags.append(tag)
+                            tags.add(tag)
             modtags = "|".join(tags).replace(", ",",").replace(" ","_").replace(",","|").split("|")
             metadata['keywords'] = modtags
     except Exception as e:
@@ -278,27 +282,27 @@ def update_local_file_metadata(matched_file, flickr_data, local_metadata_map):
             et.set_tags(matched_file, tags={'XPComment': flickr_data['description']},
                         params=["-P", "-overwrite_original"])
             for lfile in matched_file:
-                localtags = local_metadata_map.get(lfile)['iptc_keywords']
-                if flickr_data['tags']:
-                    if localtags:
+                localtags = local_metadata_map.get(lfile)['keywords']
+                if flickr_data['tags'] and len(flickr_data['tags']) > 0:
+                    if localtags and len(localtags) > 0:
                         newtags = list(set(localtags) | set(flickr_data['tags']))
                         et.set_tags(lfile, tags={'Keywords': newtags}, params=["-P", "-overwrite_original"])
                         flickr.photos.settags(photo_id=flickr_data['photoid'], tags=" ".join(newtags))
-                        print(f"Tags: {newtags}")
+                        print(f"Tags: {newtags} <=>")
                     else:
                         et.set_tags(lfile, tags={'Keywords': flickr_data['tags']}, params=["-P", "-overwrite_original"])
-                        print(f"Tags: {flickr_data['tags']}")
+                        print(f"Tags: {flickr_data['tags']} =>L")
                 else:
-                    if localtags:
+                    if localtags and len(localtags) > 0:
                         flickr.photos.settags(photo_id=flickr_data['photoid'], tags=" ".join(localtags))
-                        print(f"Tags: {localtags}")
+                        print(f"Tags: {localtags} F<=")
 
             #et.set_tags(matched_file, tags={'': flickr_data['tags']},)
             # GPS座標の書き込み
             if flickr_data['latitude'] is not None and flickr_data['longitude'] is not None:
                 print(f"    GPS座標: ({flickr_data['latitude']}, {flickr_data['longitude']}) を書き込み。")
-                et.set_tags(matched_file, tags={'GPSLatitude': flickr_data['latitude'], })
-                et.set_tags(matched_file, tags={'GPSLongitude': flickr_data['longitude'], })
+                et.set_tags(matched_file, tags={'GPSLatitude': flickr_data['latitude']}, params=["-P", "-overwrite_original"])
+                et.set_tags(matched_file, tags={'GPSLongitude': flickr_data['longitude']}, params=["-P", "-overwrite_original"])
                 #et.set_tags(matched_file, tags={'GPSAltitude': flickr_data['altitude']})
 
         print(f"  ローカルファイル {matched_file} のメタデータ更新完了。\n")
