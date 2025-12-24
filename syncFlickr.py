@@ -283,7 +283,7 @@ def update_local_file_metadata(matched_file, flickr_data, local_metadata_map):
                         params=["-P", "-overwrite_original"])
             for lfile in matched_file:
                 localtags = local_metadata_map.get(lfile)['keywords']
-                if flickr_data['tags'] and len(flickr_data['tags']) > 0:
+                if flickr_data['tags'] and len(flickr_data['tags']) > 0 and localtags != flickr_data['tags']:
                     if localtags and len(localtags) > 0:
                         newtags = list(set(localtags) | set(flickr_data['tags']))
                         et.set_tags(lfile, tags={'Keywords': newtags}, params=["-P", "-overwrite_original"])
@@ -313,10 +313,10 @@ def update_local_file_metadata(matched_file, flickr_data, local_metadata_map):
 # --- メイン処理 ---
 def synchronize_photos(args):
     local_files = []
-    for root, _, files in os.walk(args.folder):
-        for file in files:
-            if file.lower().endswith(('.jpg', '.jpeg', '.tif', '.tiff', '.NEF', '.ORF', '.psd')):  # 画像ファイルのみを対象
-                local_files.append(os.path.join(root, file))
+    for file in os.listdir(args.folder):
+        fpath = os.path.join(args.folder, file)
+        if os.path.isfile(fpath) and file.lower().endswith(('.jpg', '.jpeg', '.tif', '.tiff', '.NEF', '.ORF', '.psd')):  # 画像ファイルのみを対象
+            local_files.append(fpath)
     print(f"ローカルに {len(local_files)} 個の画像ファイルが見つかりました。\n")
     # ローカルファイル情報を事前に読み込む
     local_metadata_map = {}
