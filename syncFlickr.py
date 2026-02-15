@@ -19,7 +19,7 @@ def clean_filename(text: str) -> str:
     """
     文字列の末尾から指定されたサフィックスを、含まれなくなるまで繰り返し削除する関数。
     """
-    suffixes_to_remove = ["-scanned", "_Nik", "_Nik_NIK"]
+    suffixes_to_remove = ["-scanned", "_Nik", "_Nik_NIK","_DxO"]
 
     # 削除できるサフィックスがある限り、ループを続ける
     while True:
