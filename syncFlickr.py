@@ -215,7 +215,18 @@ def update_matched_local(f_photo, local_metadata_map):
             print(f"マッチを検出 (Title and filename): Flickr ID {f_photo['id']} とファイル {l_meta['filename']}")
             matched_file.append(l_filepath)
             found_match = True
-
+    # JPEGファイルを modified date でマッチを検出した場合、基の TIFファイルとJPEGファイルとでModified Dateが1、2秒異なっている
+    # ために基のTIFファイルが検出されない。基のTIFファイルのファイル名はわかるので、基のTIFファイルが検出されていなかったらTIFファイル名を追加
+    if found_match:
+        toappend =[]
+        for m_file in matched_file:
+            m_basename = os.path.splitext(m_file)[0]
+            m_ext = os.path.splitext(m_file)[1]
+            # 基のTIFファイルはJPGファイルのBasenameの末尾から”_NIK"を取りさって拡張しを".tif" に変えたものである
+            m_tif = m_basename.removesuffix("_NIK")+".tif"
+            if m_ext == ".jpg" and m_tif not in matched_file and m_tif in local_metadata_map.keys():
+                toappend.append(m_tif)
+        matched_file = matched_file + toappend
     if not found_match:
         print(f">>>>>Flickr写真 ID {f_photo['id']} (Title: {f_title}) に対応するローカルファイルが見つかりませんでした。")
         return
