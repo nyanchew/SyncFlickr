@@ -283,16 +283,14 @@ def get_local_file_metadata(filepath):
 
 
 def update_local_file_metadata(matched_file, flickr_data, local_metadata_map):
-    """
-    ローカルの画像ファイルにFlickrのメタデータを書き込む
-    """
-    try:
-        with ExifToolHelper() as et:
-            et.set_tags(matched_file, tags={'ImageDescription': flickr_data['title']},
-                        params=["-P", "-overwrite_original"])
-            et.set_tags(matched_file, tags={'XPComment': flickr_data['description']},
-                        params=["-P", "-overwrite_original"])
-            for lfile in matched_file:
+    # ローカルの画像ファイルにFlickrのメタデータを書き込む
+    with ExifToolHelper() as et:
+        et.set_tags(matched_file, tags={'ImageDescription': flickr_data['title']},
+                    params=["-P", "-overwrite_original"])
+        et.set_tags(matched_file, tags={'XPComment': flickr_data['description']},
+                    params=["-P", "-overwrite_original"])
+        for lfile in matched_file:
+            try:
                 localtags = local_metadata_map.get(lfile)['keywords']
                 if flickr_data['tags'] and len(flickr_data['tags']) > 0 and localtags != flickr_data['tags']:
                     if localtags and len(localtags) > 0:
@@ -307,6 +305,8 @@ def update_local_file_metadata(matched_file, flickr_data, local_metadata_map):
                     if localtags and len(localtags) > 0:
                         flickr.photos.settags(photo_id=flickr_data['photoid'], tags=" ".join(localtags))
                         print(f"Tags: {localtags} F<=")
+            except Exception as e:
+                print(f"  ローカルファイル {matched_file} のメタデータ書き込みエラー: {e}\n")
 
             #et.set_tags(matched_file, tags={'': flickr_data['tags']},)
             # GPS座標の書き込み
@@ -317,8 +317,6 @@ def update_local_file_metadata(matched_file, flickr_data, local_metadata_map):
                 #et.set_tags(matched_file, tags={'GPSAltitude': flickr_data['altitude']})
 
         print(f"  ローカルファイル {matched_file} のメタデータ更新完了。\n")
-    except Exception as e:
-        print(f"  ローカルファイル {matched_file} のメタデータ書き込みエラー: {e}\n")
 
 
 # --- メイン処理 ---
