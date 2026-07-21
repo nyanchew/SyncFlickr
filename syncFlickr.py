@@ -285,10 +285,13 @@ def get_local_file_metadata(filepath):
 def update_local_file_metadata(matched_file, flickr_data, local_metadata_map):
     # ローカルの画像ファイルにFlickrのメタデータを書き込む
     with ExifToolHelper() as et:
-        et.set_tags(matched_file, tags={'ImageDescription': flickr_data['title']},
-                    params=["-P", "-overwrite_original"])
-        et.set_tags(matched_file, tags={'XPComment': flickr_data['description']},
-                    params=["-P", "-overwrite_original"])
+        try:
+            et.set_tags(matched_file, tags={'ImageDescription': flickr_data['title']},
+                        params=["-P", "-overwrite_original"])
+            et.set_tags(matched_file, tags={'XPComment': flickr_data['description']},
+                        params=["-P", "-overwrite_original"])
+        except Exception as e:
+            print(f"  {matched_file}:Title、Desctiption書き込みエラー: {e}\n")
         for lfile in matched_file:
             try:
                 localtags = local_metadata_map.get(lfile)['keywords']
